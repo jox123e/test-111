@@ -1,0 +1,533 @@
+<roblox xmlns:xmime="http://www.w3.org/2005/05/xmlmime" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.roblox.com/roblox.xsd" version="4">
+	<Meta name="ExplicitAutoJoints">true</Meta>
+	<Item class="ReplicatedStorage" referent="RBX5B771F42EA0C4ADEB202A4E9E6AC9683">
+		<Properties>
+			<string name="Name">ReplicatedStorage</string>
+		</Properties>
+		<Item class="ModuleScript" referent="RBXD78C9D35DBC04269A98651AAD82746FE">
+			<Properties>
+				<string name="Name">BodyZones</string>
+				<ProtectedString name="Source"><![CDATA[-- BodyZones (ModuleScript)
+-- Ponlo en: ReplicatedStorage
+--
+-- Mapea cada parte del rig R15 a una "zona" con su nombre, su organo de juego,
+-- un multiplicador de danio y una lista de textos de lesion. Es texto de
+-- ambientacion para el juego, no es informacion medica real.
+
+local BodyZones = {}
+
+local zones = {
+	Head = {
+		display = "Cabeza",
+		organ = "Craneo",
+		multiplier = 4,
+		knockdown = false,
+		injuries = {
+			"Impacto craneal critico",
+			"Conmocion severa (simulada)",
+		},
+	},
+	UpperTorso = {
+		display = "Torso superior",
+		organ = "Pulmon / Corazon",
+		multiplier = 2,
+		knockdown = false,
+		injuries = {
+			"Herida perforante en el pecho",
+			"Dificultad para respirar (simulada)",
+		},
+	},
+	LowerTorso = {
+		display = "Abdomen",
+		organ = "Organos abdominales",
+		multiplier = 1.5,
+		knockdown = false,
+		injuries = {
+			"Herida abdominal",
+			"Dolor intenso (simulado)",
+		},
+	},
+	LeftUpperArm = {
+		display = "Brazo izquierdo", organ = "Musculo", multiplier = 0.7, knockdown = false,
+		injuries = { "Herida en el brazo", "Perdida de fuerza en el brazo" },
+	},
+	LeftLowerArm = {
+		display = "Antebrazo izquierdo", organ = "Hueso", multiplier = 0.6, knockdown = false,
+		injuries = { "Posible fractura de antebrazo" },
+	},
+	LeftHand = {
+		display = "Mano izquierda", organ = "Tejido", multiplier = 0.5, knockdown = false,
+		injuries = { "Herida en la mano" },
+	},
+	RightUpperArm = {
+		display = "Brazo derecho", organ = "Musculo", multiplier = 0.7, knockdown = false,
+		injuries = { "Herida en el brazo", "Perdida de fuerza en el brazo" },
+	},
+	RightLowerArm = {
+		display = "Antebrazo derecho", organ = "Hueso", multiplier = 0.6, knockdown = false,
+		injuries = { "Posible fractura de antebrazo" },
+	},
+	RightHand = {
+		display = "Mano derecha", organ = "Tejido", multiplier = 0.5, knockdown = false,
+		injuries = { "Herida en la mano" },
+	},
+	LeftUpperLeg = {
+		display = "Muslo izquierdo", organ = "Musculo / Hueso", multiplier = 0.9, knockdown = true,
+		injuries = { "Herida en el muslo", "Dificultad para caminar" },
+	},
+	LeftLowerLeg = {
+		display = "Pantorrilla izquierda", organ = "Hueso", multiplier = 0.8, knockdown = true,
+		injuries = { "Posible fractura de pierna" },
+	},
+	LeftFoot = {
+		display = "Pie izquierdo", organ = "Tejido", multiplier = 0.5, knockdown = true,
+		injuries = { "Herida en el pie" },
+	},
+	RightUpperLeg = {
+		display = "Muslo derecho", organ = "Musculo / Hueso", multiplier = 0.9, knockdown = true,
+		injuries = { "Herida en el muslo", "Dificultad para caminar" },
+	},
+	RightLowerLeg = {
+		display = "Pantorrilla derecha", organ = "Hueso", multiplier = 0.8, knockdown = true,
+		injuries = { "Posible fractura de pierna" },
+	},
+	RightFoot = {
+		display = "Pie derecho", organ = "Tejido", multiplier = 0.5, knockdown = true,
+		injuries = { "Herida en el pie" },
+	},
+}
+
+-- para partes que no esten en la tabla (accesorios, HumanoidRootPart, etc.)
+local fallback = {
+	display = "Cuerpo",
+	organ = "Tejido",
+	multiplier = 1,
+	knockdown = false,
+	injuries = { "Impacto generico" },
+}
+
+function BodyZones.GetZoneData(partName)
+	return zones[partName] or fallback
+end
+
+return BodyZones
+]]></ProtectedString>
+			</Properties>
+		</Item>
+	</Item>
+	<Item class="ServerScriptService" referent="RBXF198BDD0913945E886EA8A53B3527223">
+		<Properties>
+			<string name="Name">ServerScriptService</string>
+		</Properties>
+		<Item class="ModuleScript" referent="RBX4F29DD778CB547A4B442F435E780069E">
+			<Properties>
+				<string name="Name">RagdollController</string>
+				<ProtectedString name="Source"><![CDATA[-- RagdollController (ModuleScript)
+-- Ponlo en: ServerScriptService
+--
+-- Convierte las juntas (Motor6D) de un personaje R15 en BallSocketConstraints
+-- para que caiga como ragdoll, y puede revertirlo despues.
+
+local RagdollController = {}
+
+local function getMotors(character)
+	local motors = {}
+	for _, d in ipairs(character:GetDescendants()) do
+		if d:IsA("Motor6D") then
+			table.insert(motors, d)
+		end
+	end
+	return motors
+end
+
+function RagdollController.Enable(character)
+	local humanoid = character:FindFirstChildOfClass("Humanoid")
+	if not humanoid then return end
+	if character:GetAttribute("Ragdolled") then return end
+	character:SetAttribute("Ragdolled", true)
+
+	humanoid.PlatformStand = true
+	pcall(function()
+		humanoid:ChangeState(Enum.HumanoidStateType.Physics)
+	end)
+
+	local rigFolder = Instance.new("Folder")
+	rigFolder.Name = "RagdollRig"
+	rigFolder.Parent = character
+
+	for _, motor in ipairs(getMotors(character)) do
+		local part0, part1 = motor.Part0, motor.Part1
+		if part0 and part1 then
+			part1.CanCollide = true
+
+			local a0 = Instance.new("Attachment")
+			a0.Name = "Ragdoll_" .. motor.Name .. "_0"
+			a0.CFrame = motor.C0
+			a0.Parent = part0
+
+			local a1 = Instance.new("Attachment")
+			a1.Name = "Ragdoll_" .. motor.Name .. "_1"
+			a1.CFrame = motor.C1
+			a1.Parent = part1
+
+			local socket = Instance.new("BallSocketConstraint")
+			socket.Attachment0 = a0
+			socket.Attachment1 = a1
+			socket.LimitsEnabled = true
+			socket.TwistLimitsEnabled = true
+			socket.UpperAngle = 45
+			socket.TwistUpperAngle = 30
+			socket.TwistLowerAngle = -30
+			socket.Parent = rigFolder
+
+			motor.Enabled = false
+		end
+	end
+end
+
+function RagdollController.Disable(character)
+	if not character:GetAttribute("Ragdolled") then return end
+	character:SetAttribute("Ragdolled", false)
+
+	local humanoid = character:FindFirstChildOfClass("Humanoid")
+
+	local rigFolder = character:FindFirstChild("RagdollRig")
+	if rigFolder then
+		rigFolder:Destroy()
+	end
+
+	for _, motor in ipairs(getMotors(character)) do
+		motor.Enabled = true
+	end
+
+	for _, part in ipairs(character:GetDescendants()) do
+		if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then
+			part.CanCollide = false
+		end
+	end
+
+	if humanoid then
+		humanoid.PlatformStand = false
+		pcall(function()
+			humanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
+		end)
+	end
+end
+
+function RagdollController.IsRagdolled(character)
+	return character:GetAttribute("Ragdolled") == true
+end
+
+return RagdollController
+]]></ProtectedString>
+			</Properties>
+		</Item>
+		<Item class="ModuleScript" referent="RBX89F1AC60D5664EEBBA80AC8BC767B01D">
+			<Properties>
+				<string name="Name">DamageAPI</string>
+				<ProtectedString name="Source"><![CDATA[-- DamageAPI (ModuleScript)
+-- Ponlo en: ServerScriptService (junto a RagdollController.lua)
+--
+-- Punto central: cualquier arma del juego llama a DamageAPI.ProcessHit(...)
+-- cuando su rayo impacta una parte. Esto decide la zona, el danio, si hay
+-- ragdoll, crea el efecto de sangre y avisa a los clientes para la UI.
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Debris = game:GetService("Debris")
+
+local BodyZones = require(ReplicatedStorage:WaitForChild("BodyZones"))
+local RagdollController = require(script.Parent:WaitForChild("RagdollController"))
+
+local DamageAPI = {}
+
+-- carpeta y evento compartidos para avisarle a los clientes (se crean solos si faltan)
+local remotesFolder = ReplicatedStorage:FindFirstChild("RagdollShooterRemotes")
+if not remotesFolder then
+	remotesFolder = Instance.new("Folder")
+	remotesFolder.Name = "RagdollShooterRemotes"
+	remotesFolder.Parent = ReplicatedStorage
+end
+
+local hitInfoEvent = remotesFolder:FindFirstChild("HitInfoEvent")
+if not hitInfoEvent then
+	hitInfoEvent = Instance.new("RemoteEvent")
+	hitInfoEvent.Name = "HitInfoEvent"
+	hitInfoEvent.Parent = remotesFolder
+end
+
+local KNOCKDOWN_SECONDS = 2.5
+
+-- un estallido corto de particulas rojas; nada de charcos ni decals permanentes
+local function spawnBlood(position)
+	local anchor = Instance.new("Part")
+	anchor.Size = Vector3.new(0.1, 0.1, 0.1)
+	anchor.Transparency = 1
+	anchor.CanCollide = false
+	anchor.Anchored = true
+	anchor.CFrame = CFrame.new(position)
+	anchor.Parent = workspace
+
+	local emitter = Instance.new("ParticleEmitter")
+	emitter.Texture = "rbxasset://textures/particles/smoke_main.dds"
+	emitter.Color = ColorSequence.new(Color3.fromRGB(140, 10, 10))
+	emitter.Size = NumberSequence.new(0.25, 0)
+	emitter.Lifetime = NumberRange.new(0.25, 0.5)
+	emitter.Speed = NumberRange.new(4, 9)
+	emitter.SpreadAngle = Vector2.new(25, 25)
+	emitter.Rate = 0
+	emitter.Parent = anchor
+
+	emitter:Emit(10)
+	Debris:AddItem(anchor, 1.5)
+end
+
+-- attacker: Player que disparo (puede ser nil)
+-- hitPart: BasePart que recibio el rayo
+-- hitPosition: Vector3 del punto de impacto
+-- baseDamage: numero; se multiplica segun la zona
+function DamageAPI.ProcessHit(attacker, hitPart, hitPosition, baseDamage)
+	local character = hitPart and hitPart.Parent
+	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+	if not humanoid or humanoid.Health <= 0 then
+		return nil
+	end
+
+	local zone = BodyZones.GetZoneData(hitPart.Name)
+	local damage = (baseDamage or 20) * zone.multiplier
+
+	humanoid:TakeDamage(damage)
+	spawnBlood(hitPosition)
+
+	local injuryText = zone.injuries[math.random(1, #zone.injuries)]
+	local isKill = humanoid.Health <= 0
+
+	if isKill then
+		RagdollController.Enable(character)
+	elseif zone.knockdown then
+		RagdollController.Enable(character)
+		task.delay(KNOCKDOWN_SECONDS, function()
+			if character.Parent and humanoid.Health > 0 then
+				RagdollController.Disable(character)
+			end
+		end)
+	end
+
+	hitInfoEvent:FireAllClients({
+		attacker = attacker and attacker.Name or "?",
+		target = character.Name,
+		zone = zone.display,
+		organ = zone.organ,
+		injury = injuryText,
+		damage = math.floor(damage),
+		isKill = isKill,
+	})
+
+	return {
+		zone = zone,
+		damage = damage,
+		injury = injuryText,
+		isKill = isKill,
+	}
+end
+
+return DamageAPI
+]]></ProtectedString>
+			</Properties>
+		</Item>
+	</Item>
+	<Item class="StarterGui" referent="RBX7DB125F7578F44198AA7ABCF450F29FC">
+		<Properties>
+			<string name="Name">StarterGui</string>
+		</Properties>
+		<Item class="LocalScript" referent="RBX0777DEFEE6D44059B900EA7F1BCD57AA">
+			<Properties>
+				<string name="Name">HitInfoUI</string>
+				<ProtectedString name="Source"><![CDATA[-- HitInfoUI (LocalScript)
+-- Ponlo en: StarterGui
+--
+-- Muestra un pequenio registro de combate (combat log) abajo a la derecha
+-- con la zona, el organo, el tipo de lesion y el danio de cada impacto.
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Players = game:GetService("Players")
+
+local remotesFolder = ReplicatedStorage:WaitForChild("RagdollShooterRemotes")
+local hitInfoEvent = remotesFolder:WaitForChild("HitInfoEvent")
+
+local player = Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
+
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "CombatLog"
+screenGui.ResetOnSpawn = false
+screenGui.IgnoreGuiInset = true
+screenGui.Parent = playerGui
+
+local list = Instance.new("Frame")
+list.Size = UDim2.new(0, 300, 0, 170)
+list.Position = UDim2.new(1, -312, 1, -190)
+list.BackgroundTransparency = 1
+list.Parent = screenGui
+
+local layout = Instance.new("UIListLayout")
+layout.SortOrder = Enum.SortOrder.LayoutOrder
+layout.VerticalAlignment = Enum.VerticalAlignment.Bottom
+layout.Padding = UDim.new(0, 2)
+layout.Parent = list
+
+local function addLine(text, color)
+	local label = Instance.new("TextLabel")
+	label.Size = UDim2.new(1, 0, 0, 20)
+	label.BackgroundTransparency = 1
+	label.Font = Enum.Font.GothamBold
+	label.TextSize = 14
+	label.TextColor3 = color
+	label.TextStrokeTransparency = 0.5
+	label.TextXAlignment = Enum.TextXAlignment.Right
+	label.Text = text
+	label.LayoutOrder = os.clock() * 1000
+	label.Parent = list
+
+	task.delay(4, function()
+		if label then
+			label:Destroy()
+		end
+	end)
+end
+
+hitInfoEvent.OnClientEvent:Connect(function(info)
+	local verb = info.isKill and "ELIMINADO" or "Impacto"
+	local text = string.format(
+		"%s -> %s | %s (%s) | %s | %d dmg%s",
+		info.attacker, info.target, info.zone, info.organ, info.injury, info.damage,
+		info.isKill and " [" .. verb .. "]" or ""
+	)
+	local color = info.isKill and Color3.fromRGB(255, 90, 90) or Color3.fromRGB(255, 255, 255)
+	addLine(text, color)
+end)
+]]></ProtectedString>
+			</Properties>
+		</Item>
+	</Item>
+	<Item class="StarterPack" referent="RBX72555C66660B4DAA89E1DD6B16759CF0">
+		<Properties>
+			<string name="Name">StarterPack</string>
+		</Properties>
+		<Item class="Tool" referent="RBXD71695240D4E46D8BE599965B85F355A">
+			<Properties>
+				<string name="Name">DemoGun</string>
+				<bool name="RequiresHandle">true</bool>
+				<bool name="CanBeDropped">false</bool>
+			</Properties>
+				<Item class="Part" referent="RBXF7F3578C49724B088ED95C2476DDC3F7">
+					<Properties>
+						<string name="Name">Handle</string>
+						<bool name="Anchored">false</bool>
+						<bool name="CanCollide">false</bool>
+						<token name="Shape">1</token>
+						<Vector3 name="size"><X>0.4</X><Y>2</Y><Z>1</Z></Vector3>
+						<CoordinateFrame name="CFrame">
+							<X>0</X><Y>5</Y><Z>0</Z>
+							<R00>1</R00><R01>0</R01><R02>0</R02>
+							<R10>0</R10><R11>1</R11><R12>0</R12>
+							<R20>0</R20><R21>0</R21><R22>1</R22>
+						</CoordinateFrame>
+						<Color3uint8 name="Color3uint8">4281611812</Color3uint8>
+						<token name="Material">256</token>
+					</Properties>
+				</Item>
+		<Item class="LocalScript" referent="RBX499F56CED8C64E9AAB12B0D20A7CA6AC">
+			<Properties>
+				<string name="Name">GunClient</string>
+				<ProtectedString name="Source"><![CDATA[-- GunClient (LocalScript)
+-- Ponlo DENTRO de la Tool, junto al Handle
+--
+-- Tool.Activated se dispara tanto con click (PC) como con un toque en
+-- pantalla (movil) mientras la herramienta este equipada, asi que no hace
+-- falta leer el touch a mano. Se apunta con el centro de la camara.
+
+local tool = script.Parent
+local camera = workspace.CurrentCamera
+
+local remote = tool:WaitForChild("FireWeapon")
+
+local COOLDOWN = 0.15
+local lastFire = 0
+
+tool.Activated:Connect(function()
+	local now = os.clock()
+	if now - lastFire < COOLDOWN then
+		return
+	end
+	lastFire = now
+
+	local origin = camera.CFrame.Position
+	local direction = camera.CFrame.LookVector
+	remote:FireServer(origin, direction)
+end)
+]]></ProtectedString>
+			</Properties>
+		</Item>
+		<Item class="Script" referent="RBXF9B7C8F2C4314C0FA0A1021657EA4DE5">
+			<Properties>
+				<string name="Name">GunServer</string>
+				<ProtectedString name="Source"><![CDATA[-- GunServer (Script)
+-- Ponlo DENTRO de la Tool, junto al Handle y a GunClient
+--
+-- Recibe el disparo del cliente, hace el raycast en el servidor (para que no
+-- se pueda falsear desde el cliente) y le pasa el impacto a DamageAPI.
+
+local tool = script.Parent
+local ServerScriptService = game:GetService("ServerScriptService")
+
+local DamageAPI = require(ServerScriptService:WaitForChild("DamageAPI"))
+
+local remote = tool:FindFirstChild("FireWeapon")
+if not remote then
+	remote = Instance.new("RemoteEvent")
+	remote.Name = "FireWeapon"
+	remote.Parent = tool
+end
+
+local BASE_DAMAGE = 20
+local MAX_RANGE = 300
+local COOLDOWN = 0.15
+
+local lastFire = {}
+
+remote.OnServerEvent:Connect(function(player, origin, direction)
+	if typeof(origin) ~= "Vector3" or typeof(direction) ~= "Vector3" then
+		return
+	end
+
+	local now = os.clock()
+	if lastFire[player] and now - lastFire[player] < COOLDOWN then
+		return
+	end
+	lastFire[player] = now
+
+	if direction.Magnitude == 0 then
+		return
+	end
+	direction = direction.Unit
+
+	local character = player.Character
+	if not character then
+		return
+	end
+
+	local params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Exclude
+	params.FilterDescendantsInstances = { character, tool }
+
+	local result = workspace:Raycast(origin, direction * MAX_RANGE, params)
+	if result and result.Instance then
+		DamageAPI.ProcessHit(player, result.Instance, result.Position, BASE_DAMAGE)
+	end
+end)
+]]></ProtectedString>
+			</Properties>
+		</Item>
+		</Item>
+	</Item>
+</roblox>
