@@ -1,0 +1,13 @@
+<roblox version="4">
+  <Item class="ModuleScript" referent="0">
+    <Properties>
+      <string name="Name">MainModule</string>
+      <string name="Source"><![CDATA[local function wow()
+    print("yoo")
+end
+
+return { h = wow }
+]]></string>
+    </Properties>
+  </Item>
+</roblox>
