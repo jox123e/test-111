@@ -1,0 +1,41 @@
+
+<?xml version="1.0" encoding="utf-8"?>
+<roblox xmlns:xmime="http://www.roblox.com/2006/05/xmlmime"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xsi:noNamespaceSchemaLocation="http://www.roblox.com/roblox.xsd"
+       version="4">
+  <Item class="Workspace" referent="RBX0">
+    <Properties>
+      <string name="Name">Workspace</string>
+      <bool name="Archivable">true</bool>
+      <float name="Gravity">196.2</float>
+    </Properties>
+    <Item class="Part" referent="RBX1">
+      <Properties>
+        <string name="Name">TestPart</string>
+        <bool name="Anchored">true</bool>
+        <bool name="CanCollide">true</bool>
+        <CoordinateFrame name="CFrame">
+          <X>0</X>
+          <Y>5</Y>
+          <Z>0</Z>
+          <R00>1</R00>
+          <R01>0</R01>
+          <R02>0</R02>
+          <R10>0</R10>
+          <R11>1</R11>
+          <R12>0</R12>
+          <R20>0</R20>
+          <R21>0</R21>
+          <R22>1</R22>
+        </CoordinateFrame>
+        <Vector3 name="Size">
+          <X>8</X>
+          <Y>1</Y>
+          <Z>8</Z>
+        </Vector3>
+        <float name="Transparency">0</float>
+      </Properties>
+    </Item>
+  </Item>
+</roblox>
